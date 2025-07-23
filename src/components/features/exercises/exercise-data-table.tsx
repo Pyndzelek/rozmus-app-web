@@ -4,9 +4,15 @@ import { useState, useTransition } from "react";
 import { Database } from "@/types/supabase";
 import { toast } from "sonner";
 import { z } from "zod";
-import { createExercise } from "@/lib/actions/exercises.actions";
+import {
+  createExercise,
+  deleteExercise,
+  updateExercise,
+} from "@/lib/actions/exercises.actions";
+import { MoreHorizontal, Trash2, Pencil } from "lucide-react";
 import { exerciseSchema } from "@/lib/validation";
 
+// Importy komponentów UI
 import {
   Table,
   TableBody,
@@ -21,11 +27,26 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal } from "lucide-react";
 import { ExerciseForm } from "./exercise-form";
 
 type Exercise = Database["public"]["Tables"]["exercise_definitions"]["Row"];
@@ -35,19 +56,75 @@ interface ExerciseDataTableProps {
 }
 
 export function ExerciseDataTable({ data }: ExerciseDataTableProps) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  // Stany dla edycji
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(
+    null
+  );
+
+  // Stany dla usuwania
+  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  const [exerciseToDelete, setExerciseToDelete] = useState<Exercise | null>(
+    null
+  );
+
+  // Handler do otwierania modala edycji
+  const handleEditClick = (exercise: Exercise) => {
+    setSelectedExercise(exercise);
+    setIsEditModalOpen(true);
+  };
+
+  // Handler do otwierania alertu usuwania
+  const handleDeleteClick = (exercise: Exercise) => {
+    setExerciseToDelete(exercise);
+    setIsDeleteAlertOpen(true);
+  };
+
+  // Handler do wysyłania formularza (obsługuje teraz tworzenie i edycję)
   const onSubmit = (values: z.infer<typeof exerciseSchema>) => {
     startTransition(async () => {
       try {
-        await createExercise(values);
-        toast.success("Sukces!", {
-          description: "Nowe ćwiczenie zostało dodane.",
-        });
-        setIsModalOpen(false); // Zamknij modal po sukcesie
+        if (selectedExercise) {
+          // Tryb edycji
+          await updateExercise(selectedExercise.id, values);
+          toast.success("Sukces!", {
+            description: "Ćwiczenie zostało zaktualizowane.",
+          });
+          setIsEditModalOpen(false);
+          setSelectedExercise(null);
+        } else {
+          // Tryb tworzenia
+          await createExercise(values);
+          toast.success("Sukces!", {
+            description: "Nowe ćwiczenie zostało dodane.",
+          });
+          setIsCreateModalOpen(false);
+        }
       } catch (error) {
-        toast.error("Błąd!", { description: "Nie udało się dodać ćwiczenia." });
+        toast.error("Błąd!", { description: "Wystąpił nieoczekiwany błąd." });
+      }
+    });
+  };
+
+  // Handler do potwierdzenia usunięcia
+  const onConfirmDelete = () => {
+    if (!exerciseToDelete) return;
+
+    startTransition(async () => {
+      try {
+        await deleteExercise(exerciseToDelete.id);
+        toast.success("Sukces!", {
+          description: `Ćwiczenie "${exerciseToDelete.name}" zostało usunięte.`,
+        });
+        setIsDeleteAlertOpen(false);
+        setExerciseToDelete(null);
+      } catch (error) {
+        toast.error("Błąd!", {
+          description: "Nie udało się usunąć ćwiczenia.",
+        });
       }
     });
   };
@@ -56,32 +133,67 @@ export function ExerciseDataTable({ data }: ExerciseDataTableProps) {
     <>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Biblioteka Ćwiczeń</h1>
-        <Button onClick={() => setIsModalOpen(true)}>
+        <Button onClick={() => setIsCreateModalOpen(true)}>
           + Dodaj Nowe Ćwiczenie
         </Button>
       </div>
 
-      {/* Okno dialogowe z formularzem */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+      {/* Dialog do TWORZENIA ćwiczeń */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Dodaj nowe ćwiczenie</DialogTitle>
-            <DialogDescription>
-              Wypełnij poniższe pola, aby dodać nowe ćwiczenie do swojej
-              biblioteki.
-            </DialogDescription>
           </DialogHeader>
           <ExerciseForm onSubmit={onSubmit} isPending={isPending} />
         </DialogContent>
       </Dialog>
 
-      {/* Istniejąca tabela */}
+      {/* Dialog do EDYCJI ćwiczeń */}
+      <Dialog
+        open={isEditModalOpen}
+        onOpenChange={(isOpen) => {
+          setIsEditModalOpen(isOpen);
+          if (!isOpen) setSelectedExercise(null); // Resetuj po zamknięciu
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edytuj ćwiczenie</DialogTitle>
+          </DialogHeader>
+          <ExerciseForm
+            onSubmit={onSubmit}
+            isPending={isPending}
+            initialData={selectedExercise} // Przekazujemy dane do formularza
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Alert do POTWIERDZENIA USUNIĘCIA */}
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Czy na pewno chcesz usunąć?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tej akcji nie można cofnąć. Ćwiczenie{" "}
+              <strong>{exerciseToDelete?.name}</strong> zostanie trwale
+              usunięte.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction onClick={onConfirmDelete} disabled={isPending}>
+              {isPending ? "Usuwanie..." : "Usuń"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Tabela */}
       <div className="rounded-md border">
         <Table>
-          {/* ...reszta kodu tabeli bez zmian... */}
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[40%]">Nazwa ćwiczenia</TableHead>
+              <TableHead>Nazwa</TableHead>
               <TableHead>Kategoria</TableHead>
               <TableHead>Główne mięśnie</TableHead>
               <TableHead className="text-right">Akcje</TableHead>
@@ -98,17 +210,35 @@ export function ExerciseDataTable({ data }: ExerciseDataTableProps) {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
-                    {exercise.primary_muscles_targeted?.map((muscle) => (
-                      <Badge key={muscle} variant="secondary">
-                        {muscle}
+                    {exercise.primary_muscles_targeted?.map((m) => (
+                      <Badge key={m} variant="secondary">
+                        {m}
                       </Badge>
                     ))}
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="icon">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Akcje</DropdownMenuLabel>
+                      <DropdownMenuItem
+                        onClick={() => handleEditClick(exercise)}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" /> Edytuj
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleDeleteClick(exercise)}
+                        className="text-red-500"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Usuń
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}

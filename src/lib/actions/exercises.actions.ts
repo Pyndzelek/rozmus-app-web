@@ -51,3 +51,46 @@ export async function createExercise(formData: z.infer<typeof exerciseSchema>) {
 
   return data;
 }
+
+export async function updateExercise(
+  id: string,
+  formData: z.infer<typeof exerciseSchema>
+) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("exercise_definitions")
+    .update({
+      name: formData.name,
+      description: formData.description,
+      category: formData.category,
+      primary_muscles_targeted: formData.primary_muscles_targeted,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Błąd podczas aktualizacji ćwiczenia:", error);
+    throw new Error("Nie udało się zaktualizować ćwiczenia.");
+  }
+
+  revalidatePath("/dashboard/exercises");
+  return data;
+}
+
+export async function deleteExercise(id: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("exercise_definitions")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("Błąd podczas usuwania ćwiczenia:", error);
+    throw new Error("Nie udało się usunąć ćwiczenia.");
+  }
+
+  revalidatePath("/dashboard/exercises");
+}
