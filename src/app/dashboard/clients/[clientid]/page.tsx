@@ -10,9 +10,9 @@ interface ClientPageProps {
   };
 }
 
-export default async function ClientPage({ params }: ClientPageProps) {
-  const { clientId } = params;
-
+export default async function ClientPage(props: ClientPageProps) {
+  const params = await props.params;
+  const clientId = params.clientId;
   const [client, plan] = await Promise.all([
     getClientById(clientId),
     getWorkoutPlanByClientId(clientId),

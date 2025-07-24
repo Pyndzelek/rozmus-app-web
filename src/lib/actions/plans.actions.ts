@@ -105,6 +105,7 @@ export async function addExercisesToWorkout(
   clientId: string
 ) {
   const supabase = await createClient();
+
   const { data: definitions, error: definitionsError } = await supabase
     .from("exercise_definitions")
     .select("id, name")
@@ -118,16 +119,26 @@ export async function addExercisesToWorkout(
     throw new Error("Nie udało się pobrać danych ćwiczeń.");
   }
 
-  const { count } = await supabase
+  const { data: lastExercise, error: orderError } = await supabase
     .from("workout_exercises")
-    .select("id", { count: "exact", head: true })
-    .eq("workout_id", workoutId);
+    .select("order")
+    .eq("workout_id", workoutId)
+    .order("order", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (orderError && orderError.code !== "PGRST116") {
+    console.error("Błąd podczas sprawdzania kolejności:", orderError);
+    throw new Error("Nie udało się ustalić kolejności ćwiczeń.");
+  }
+
+  const lastOrder = lastExercise?.order ?? 0;
 
   const exercisesToAdd = definitions.map((def, index) => ({
     workout_id: workoutId,
     exercise_definition_id: def.id,
     name: def.name,
-    order: (count ?? 0) + index + 1,
+    order: lastOrder + index + 1,
   }));
 
   const { error } = await supabase
@@ -193,18 +204,24 @@ export async function updateExercisesOrder(
 ) {
   const supabase = await createClient();
 
-  const updatePromises = items.map((item) =>
-    supabase
-      .from("workout_exercises")
-      .update({ order: item.order })
-      .eq("id", item.id)
-  );
+  let caseStatement = '"order" = CASE id ';
+  items.forEach((item) => {
+    caseStatement += `WHEN '${item.id}' THEN ${item.order} `;
+  });
+  caseStatement += "END";
 
-  const results = await Promise.all(updatePromises);
+  const idsToUpdate = items.map((item) => `'${item.id}'`).join(", ");
 
-  const a_Error = results.some((result) => result.error);
-  if (a_Error) {
-    console.error("Błąd podczas aktualizacji kolejności ćwiczeń", a_Error);
+  const query = `
+    UPDATE public.workout_exercises
+    SET ${caseStatement}
+    WHERE id IN (${idsToUpdate})
+  `;
+
+  const { error } = await (supabase as any).rpc("execute_sql", { sql: query });
+
+  if (error) {
+    console.error("Błąd podczas aktualizacji kolejności (raw SQL):", error);
     throw new Error("Nie udało się zaktualizować kolejności.");
   }
 

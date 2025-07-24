@@ -7,6 +7,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 
+import { DndContext, closestCenter, DragEndEvent } from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { updateExercisesOrder } from "@/lib/actions/plans.actions";
+
 // Importy akcji i typów
 import {
   WorkoutPlanWithWorkouts,
@@ -31,7 +39,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { PlusCircle } from "lucide-react";
 import { ExercisePickerModal } from "./exercise-picker-modal";
-import { WorkoutExerciseItem } from "./workout-exercise-planner";
+import { WorkoutExerciseItem } from "./workout-exercise-item";
 
 interface WorkoutPlanEditorProps {
   plan: WorkoutPlanWithWorkouts | null;
@@ -51,18 +59,23 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
   });
 
   useEffect(() => {
-    // Ten efekt uruchomi się za każdym razem, gdy prop `plan` się zmieni.
     if (selectedWorkout && plan) {
-      // Znajdź zaktualizowaną wersję wybranego dnia w nowym planie.
       const updatedWorkout = plan.workouts.find(
         (w) => w.id === selectedWorkout.id
       );
-      // Zaktualizuj stan, aby odświeżyć UI.
+
       if (updatedWorkout) {
-        setSelectedWorkout(updatedWorkout);
+        const sortedExercises = [...updatedWorkout.workout_exercises].sort(
+          (a, b) => a.order - b.order
+        );
+
+        setSelectedWorkout({
+          ...updatedWorkout,
+          workout_exercises: sortedExercises,
+        });
       }
     }
-  }, [plan, selectedWorkout?.id]); // Zależności hooka
+  }, [plan, selectedWorkout?.id]);
 
   const handleCreatePlan = () => {
     startTransition(async () => {
@@ -100,6 +113,42 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
         toast.error("Wystąpił błąd podczas dodawania ćwiczeń.");
       }
     });
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const exercises = selectedWorkout?.workout_exercises ?? [];
+      const oldIndex = exercises.findIndex((e) => e.id === active.id);
+      const newIndex = exercises.findIndex((e) => e.id === over.id);
+
+      const reorderedExercises = arrayMove(exercises, oldIndex, newIndex);
+
+      if (selectedWorkout) {
+        setSelectedWorkout({
+          ...selectedWorkout,
+          workout_exercises: reorderedExercises,
+        });
+      }
+
+      const itemsToUpdate = reorderedExercises.map((item, index) => ({
+        id: item.id,
+        order: index + 1,
+      }));
+
+      startTransition(() => {
+        updateExercisesOrder(itemsToUpdate, clientId).catch((e) => {
+          toast.error("Nie udało się zaktualizować kolejności.");
+          if (selectedWorkout) {
+            setSelectedWorkout({
+              ...selectedWorkout,
+              workout_exercises: exercises,
+            });
+          }
+        });
+      });
+    }
   };
 
   if (!plan) {
@@ -209,19 +258,25 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
               </CardHeader>
               <CardContent>
                 {selectedWorkout.workout_exercises.length > 0 ? (
-                  <div className="space-y-4">
-                    {" "}
-                    {/* Zmienione na `space-y-4` dla lepszego odstępu */}
-                    {selectedWorkout.workout_exercises
-                      .sort((a, b) => a.order - b.order) // Sortujemy wg kolejności
-                      .map((exercise) => (
-                        <WorkoutExerciseItem
-                          key={exercise.id}
-                          exercise={exercise}
-                          clientId={clientId}
-                        />
-                      ))}
-                  </div>
+                  <DndContext
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={selectedWorkout.workout_exercises.map((e) => e.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="space-y-4">
+                        {selectedWorkout.workout_exercises.map((exercise) => (
+                          <WorkoutExerciseItem
+                            key={exercise.id}
+                            exercise={exercise}
+                            clientId={clientId}
+                          />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
                 ) : (
                   <div className="text-center py-12 border-2 border-dashed rounded-lg">
                     <p className="text-gray-500">
