@@ -93,9 +93,13 @@ export function WorkoutPlanEditor({
           ),
         }))
         .sort((a, b) => {
-          const aDate = new Date(a.created_at ?? 0).getTime();
-          const bDate = new Date(b.created_at ?? 0).getTime();
-          return aDate - bDate;
+          if (a.created_at && b.created_at) {
+            return (
+              new Date(a.created_at).getTime() -
+              new Date(b.created_at).getTime()
+            );
+          }
+          return a.id.localeCompare(b.id);
         });
       setPlan({ ...initialPlan, workouts: sortedWorkouts });
 
@@ -179,19 +183,18 @@ export function WorkoutPlanEditor({
   const handleAddExercises = (exerciseIds: string[]) => {
     if (!selectedWorkout) return;
     setIsAddingExercises(true);
-    setIsPickerOpen(false); // Zamknij modal natychmiast
+    setIsPickerOpen(false);
     startTransition(() => {
       addExercisesToWorkout(selectedWorkout.id, exerciseIds, clientId)
         .then(() => {
           toast.success("Ćwiczenia zostały dodane do planu.");
-          // Opóźnij router.refresh, aby zapewnić stabilność stanu
           setTimeout(() => {
             router.refresh();
           }, 100);
         })
         .catch(() => {
           toast.error("Wystąpił błąd podczas dodawania ćwiczeń.");
-          setIsPickerOpen(false); // Upewnij się, że modal jest zamknięty w przypadku błędu
+          setIsPickerOpen(false);
         })
         .finally(() => {
           setIsAddingExercises(false);
@@ -222,7 +225,10 @@ export function WorkoutPlanEditor({
       }));
       startTransition(() => {
         updateExercisesOrder(itemsToUpdate, clientId)
-          .then(() => router.refresh())
+          .then(() => {
+            toast.success("Kolejność ćwiczeń została zaktualizowana.");
+            router.refresh();
+          })
           .catch(() => {
             toast.error("Nie udało się zaktualizować kolejności.");
             setSelectedWorkout({
