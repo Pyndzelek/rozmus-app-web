@@ -69,7 +69,7 @@ export default async function DashboardPage() {
                     </p>
                   </div>
                   <Button asChild variant="secondary" size="sm">
-                    <Link href={`/dashboard/clients/${client.id}`}>
+                    <Link href={`/dashboard/plans/${client.id}`}>
                       Zobacz Plan
                     </Link>
                   </Button>

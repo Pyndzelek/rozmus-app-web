@@ -2,7 +2,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { Database } from "@/types/supabase";
+import { Database, Tables } from "@/types/supabase";
 import { revalidatePath } from "next/cache";
 import z from "zod";
 import { exerciseParamsSchema, workoutSchema } from "../validation";
@@ -29,10 +29,11 @@ export type WorkoutPlanWithWorkouts =
 export async function getWorkoutPlanByClientId(
   clientId: string
 ): Promise<WorkoutPlanWithWorkouts | null> {
-  const supabase = await createClient();
+  if (!clientId || clientId === "undefined") {
+    throw new Error("Nieprawidłowy identyfikator podopiecznego.");
+  }
 
-  // To jest złożone zapytanie, które pobiera plan, jego treningi,
-  // a do każdego treningu dołącza jego ćwiczenia wraz z definicjami.
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from("workout_plans")
     .select(
@@ -42,24 +43,56 @@ export async function getWorkoutPlanByClientId(
         *,
         workout_exercises (
           *,
-          exercise_definitions (
-            name,
-            category
-          )
+          exercise_definitions (name)
         )
       )
     `
     )
     .eq("client_id", clientId)
-    .single(); // Zakładamy, że klient ma jeden plan
+    .eq("is_active", true)
+    .single();
 
-  if (error && error.code !== "PGRST116") {
-    // Ignoruj błąd "brak wierszy"
-    console.error("Błąd podczas pobierania planu treningowego:", error);
-    throw new Error("Nie udało się pobrać planu treningowego.");
+  if (error) {
+    console.error(
+      "Błąd Supabase podczas pobierania planu treningowego:",
+      error
+    );
+    throw new Error(`Błąd Supabase: ${error.message || JSON.stringify(error)}`);
   }
 
-  return data;
+  if (!data) {
+    return null;
+  }
+
+  const sortedWorkouts = data.workouts
+    ? data.workouts
+        .map((workout: any) => ({
+          ...workout,
+          workout_exercises: workout.workout_exercises
+            ? workout.workout_exercises
+                .map((exercise: any) => ({
+                  ...exercise,
+                  name: exercise.exercise_definitions?.name || exercise.name,
+                }))
+                .sort(
+                  (
+                    a: Tables<"workout_exercises">,
+                    b: Tables<"workout_exercises">
+                  ) => a.order - b.order
+                )
+            : [],
+        }))
+        .sort(
+          (a: Tables<"workouts">, b: Tables<"workouts">) =>
+            new Date(a.created_at!).getTime() -
+            new Date(b.created_at!).getTime()
+        )
+    : [];
+
+  return {
+    ...data,
+    workouts: sortedWorkouts,
+  };
 }
 
 export async function createWorkoutPlan(clientId: string) {
