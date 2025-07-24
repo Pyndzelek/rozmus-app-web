@@ -84,6 +84,9 @@ export async function createWorkoutPlan(clientId: string) {
 }
 
 export async function createWorkout(values: z.infer<typeof workoutSchema>) {
+  if (!values.planId || !values.clientId) {
+    throw new Error("Plan ID i Client ID są wymagane.");
+  }
   const supabase = await createClient();
 
   const { data, error } = await supabase.from("workouts").insert({

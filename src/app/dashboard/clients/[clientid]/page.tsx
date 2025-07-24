@@ -33,7 +33,7 @@ export default async function ClientPage(props: ClientPageProps) {
           {/* Przycisk usuwania pojawi się tylko, gdy plan istnieje */}
           {plan && <DeletePlanButton planId={plan.id} clientId={client.id} />}
         </div>
-        <WorkoutPlanEditor plan={plan} clientId={client.id} />
+        <WorkoutPlanEditor initialPlan={plan} clientId={client.id} />
       </div>
     </div>
   );

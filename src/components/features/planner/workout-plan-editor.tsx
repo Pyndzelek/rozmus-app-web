@@ -6,6 +6,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 import { DndContext, closestCenter, DragEndEvent } from "@dnd-kit/core";
 import {
@@ -14,7 +15,6 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 
-// Importy akcji i typów
 import {
   WorkoutPlanWithWorkouts,
   WorkoutWithExercises,
@@ -27,7 +27,6 @@ import {
 } from "@/lib/actions/plans.actions";
 import { workoutSchema } from "@/lib/validation";
 
-// Importy komponentów UI
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -53,136 +52,195 @@ import { ExercisePickerModal } from "./exercise-picker-modal";
 import { WorkoutExerciseItem } from "./workout-exercise-item";
 
 interface WorkoutPlanEditorProps {
-  plan: WorkoutPlanWithWorkouts | null;
+  initialPlan: WorkoutPlanWithWorkouts | null;
   clientId: string;
 }
 
-export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
+export function WorkoutPlanEditor({
+  initialPlan,
+  clientId,
+}: WorkoutPlanEditorProps) {
+  const [plan, setPlan] = useState<WorkoutPlanWithWorkouts | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedWorkout, setSelectedWorkout] =
     useState<WorkoutWithExercises | null>(null);
   const [isAddingWorkout, setIsAddingWorkout] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [isAddingExercises, setIsAddingExercises] = useState(false);
   const [workoutToDelete, setWorkoutToDelete] =
     useState<WorkoutWithExercises | null>(null);
   const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null);
+  const router = useRouter();
 
   const form = useForm<z.infer<typeof workoutSchema>>({
     resolver: zodResolver(workoutSchema),
-    defaultValues: { name: "", planId: plan?.id, clientId: clientId },
+    defaultValues: {
+      name: "",
+      planId: initialPlan?.id ?? "",
+      clientId: clientId,
+    },
   });
 
   useEffect(() => {
-    if (selectedWorkout && plan) {
-      const updatedWorkout = plan.workouts.find(
-        (w) => w.id === selectedWorkout.id
-      );
-      if (updatedWorkout) {
-        const sortedExercises = [...updatedWorkout.workout_exercises].sort(
-          (a, b) => a.order - b.order
-        );
-        setSelectedWorkout({
-          ...updatedWorkout,
-          workout_exercises: sortedExercises,
+    setIsLoading(true);
+    if (initialPlan) {
+      const sortedWorkouts = [...initialPlan.workouts]
+        .map((workout) => ({
+          ...workout,
+          workout_exercises: [...workout.workout_exercises].sort(
+            (a, b) => a.order - b.order
+          ),
+        }))
+        .sort((a, b) => {
+          const aDate = new Date(a.created_at ?? 0).getTime();
+          const bDate = new Date(b.created_at ?? 0).getTime();
+          return aDate - bDate;
         });
+      setPlan({ ...initialPlan, workouts: sortedWorkouts });
+
+      if (selectedWorkout) {
+        const updatedWorkout = sortedWorkouts.find(
+          (w) => w.id === selectedWorkout.id
+        );
+        if (updatedWorkout) {
+          setSelectedWorkout(updatedWorkout);
+        } else {
+          setSelectedWorkout(null);
+        }
       }
+    } else {
+      setPlan(null);
+      setSelectedWorkout(null);
     }
-  }, [plan, selectedWorkout?.id]);
+    setIsLoading(false);
+  }, [initialPlan]);
 
   const handleCreatePlan = () => {
-    startTransition(async () => {
-      try {
-        await createWorkoutPlan(clientId);
-        toast.success("Plan został utworzony!");
-      } catch (error) {
-        toast.error("Wystąpił błąd podczas tworzenia planu.");
-      }
+    setIsLoading(true);
+    startTransition(() => {
+      createWorkoutPlan(clientId)
+        .then(() => {
+          toast.success("Plan został utworzony!");
+          router.refresh();
+        })
+        .catch(() => {
+          toast.error("Błąd podczas tworzenia planu.");
+          setIsLoading(false);
+        });
+    });
+  };
+
+  const onWorkoutSubmit = (values: z.infer<typeof workoutSchema>) => {
+    if (!plan) return;
+    startTransition(() => {
+      createWorkout({ ...values, planId: plan.id })
+        .then(() => {
+          toast.success("Nowy dzień treningowy został dodany.");
+          form.reset({ name: "", planId: plan.id, clientId: clientId });
+          setIsAddingWorkout(false);
+          router.refresh();
+        })
+        .catch(() => toast.error("Nie udało się dodać dnia treningowego."));
     });
   };
 
   const handleWorkoutNameUpdate = (workoutId: string, newName: string) => {
-    if (!newName.trim()) return;
+    if (!newName.trim()) {
+      setEditingWorkoutId(null);
+      return;
+    }
     startTransition(() => {
       updateWorkout(workoutId, newName, clientId)
-        .then(() => toast.success("Nazwa dnia została zaktualizowana."))
+        .then(() => {
+          toast.success("Nazwa dnia została zaktualizowana.");
+          router.refresh();
+        })
         .catch(() => toast.error("Błąd podczas aktualizacji nazwy."))
         .finally(() => setEditingWorkoutId(null));
     });
   };
 
-  const onWorkoutSubmit = (values: z.infer<typeof workoutSchema>) => {
-    startTransition(async () => {
-      try {
-        await createWorkout(values);
-        toast.success("Nowy dzień treningowy został dodany.");
-        form.reset();
-        setIsAddingWorkout(false);
-      } catch (error) {
-        toast.error("Nie udało się dodać dnia treningowego.");
-      }
-    });
-  };
-
   const handleDeleteWorkout = () => {
     if (!workoutToDelete) return;
-    startTransition(async () => {
-      try {
-        await deleteWorkout(workoutToDelete.id, clientId);
-        toast.success(`Dzień "${workoutToDelete.name}" został usunięty.`);
-        if (selectedWorkout?.id === workoutToDelete.id) {
-          setSelectedWorkout(null);
-        }
-        setWorkoutToDelete(null);
-      } catch (error) {
-        toast.error("Nie udało się usunąć dnia treningowego.");
-      }
+    startTransition(() => {
+      deleteWorkout(workoutToDelete.id, clientId)
+        .then(() => {
+          toast.success(`Dzień "${workoutToDelete.name}" został usunięty.`);
+          if (selectedWorkout?.id === workoutToDelete.id)
+            setSelectedWorkout(null);
+          setWorkoutToDelete(null);
+          router.refresh();
+        })
+        .catch(() => toast.error("Nie udało się usunąć dnia treningowego."));
     });
   };
 
   const handleAddExercises = (exerciseIds: string[]) => {
     if (!selectedWorkout) return;
-    startTransition(async () => {
-      try {
-        await addExercisesToWorkout(selectedWorkout.id, exerciseIds, clientId);
-        toast.success("Ćwiczenia zostały dodane do planu.");
-        setIsPickerOpen(false);
-      } catch (error) {
-        toast.error("Wystąpił błąd podczas dodawania ćwiczeń.");
-      }
+    setIsAddingExercises(true);
+    setIsPickerOpen(false); // Zamknij modal natychmiast
+    startTransition(() => {
+      addExercisesToWorkout(selectedWorkout.id, exerciseIds, clientId)
+        .then(() => {
+          toast.success("Ćwiczenia zostały dodane do planu.");
+          // Opóźnij router.refresh, aby zapewnić stabilność stanu
+          setTimeout(() => {
+            router.refresh();
+          }, 100);
+        })
+        .catch(() => {
+          toast.error("Wystąpił błąd podczas dodawania ćwiczeń.");
+          setIsPickerOpen(false); // Upewnij się, że modal jest zamknięty w przypadku błędu
+        })
+        .finally(() => {
+          setIsAddingExercises(false);
+        });
     });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (over && active.id !== over.id) {
-      const exercises = selectedWorkout?.workout_exercises ?? [];
-      const oldIndex = exercises.findIndex((e) => e.id === active.id);
-      const newIndex = exercises.findIndex((e) => e.id === over.id);
-      const reorderedExercises = arrayMove(exercises, oldIndex, newIndex);
+    if (over && active.id !== over.id && selectedWorkout) {
+      const originalExercises = selectedWorkout.workout_exercises;
+      const oldIndex = originalExercises.findIndex((e) => e.id === active.id);
+      const newIndex = originalExercises.findIndex((e) => e.id === over.id);
+      const reorderedExercises = arrayMove(
+        originalExercises,
+        oldIndex,
+        newIndex
+      );
 
-      if (selectedWorkout) {
-        setSelectedWorkout({
-          ...selectedWorkout,
-          workout_exercises: reorderedExercises,
-        });
-      }
+      setSelectedWorkout({
+        ...selectedWorkout,
+        workout_exercises: reorderedExercises,
+      });
+
       const itemsToUpdate = reorderedExercises.map((item, index) => ({
         id: item.id,
         order: index + 1,
       }));
       startTransition(() => {
-        updateExercisesOrder(itemsToUpdate, clientId).catch(() => {
-          toast.error("Nie udało się zaktualizować kolejności.");
-          if (selectedWorkout) {
+        updateExercisesOrder(itemsToUpdate, clientId)
+          .then(() => router.refresh())
+          .catch(() => {
+            toast.error("Nie udało się zaktualizować kolejności.");
             setSelectedWorkout({
               ...selectedWorkout,
-              workout_exercises: exercises,
+              workout_exercises: originalExercises,
             });
-          }
-        });
+          });
       });
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-500">Ładowanie planu treningowego...</p>
+      </div>
+    );
+  }
 
   if (!plan) {
     return (
@@ -206,12 +264,13 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
     <>
       <ExercisePickerModal
         isOpen={isPickerOpen}
-        onOpenChange={setIsPickerOpen}
+        onOpenChange={(open) => {
+          if (!isAddingExercises) setIsPickerOpen(open);
+        }}
         onAddExercises={handleAddExercises}
         existingExerciseIds={existingExerciseIds}
-        isPending={isPending}
+        isPending={isAddingExercises}
       />
-
       <AlertDialog
         open={!!workoutToDelete}
         onOpenChange={(isOpen) => !isOpen && setWorkoutToDelete(null)}
@@ -258,7 +317,7 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
                     <Input
                       defaultValue={workout.name}
                       autoFocus
-                      onClick={(e) => e.stopPropagation()} // Zapobiegaj kliknięciu na kartę
+                      onClick={(e) => e.stopPropagation()}
                       onBlur={(e) =>
                         handleWorkoutNameUpdate(workout.id, e.target.value)
                       }
@@ -276,14 +335,13 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
                       {workout.name}
                     </p>
                   )}
-
                   <div className="flex items-center">
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
                       onClick={(e) => {
-                        e.stopPropagation(); // Zapobiegaj kliknięciu na kartę
+                        e.stopPropagation();
                         setEditingWorkoutId(workout.id);
                       }}
                     >
@@ -294,7 +352,7 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
                       size="icon"
                       className="h-7 w-7"
                       onClick={(e) => {
-                        e.stopPropagation(); // Zapobiegaj kliknięciu na kartę
+                        e.stopPropagation();
                         setWorkoutToDelete(workout);
                       }}
                     >
@@ -351,7 +409,11 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
               <CardHeader>
                 <CardTitle className="flex justify-between items-center">
                   <span>Ćwiczenia dla: {selectedWorkout.name}</span>
-                  <Button size="sm" onClick={() => setIsPickerOpen(true)}>
+                  <Button
+                    size="sm"
+                    onClick={() => setIsPickerOpen(true)}
+                    disabled={isAddingExercises}
+                  >
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Dodaj ćwiczenie
                   </Button>
