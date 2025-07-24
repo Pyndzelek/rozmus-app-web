@@ -1,0 +1,45 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { Database } from "@/types/supabase";
+
+// Typ dla profilu klienta, który będziemy pobierać
+export type ClientProfile = Pick<
+  Database["public"]["Tables"]["profiles"]["Row"],
+  "id" | "full_name" | "avatar_url"
+>;
+
+export async function getClients(): Promise<ClientProfile[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, avatar_url")
+    .eq("group", "USER")
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    console.error("Błąd podczas pobierania klientów:", error);
+    throw new Error("Nie udało się pobrać listy podopiecznych.");
+  }
+
+  return data;
+}
+
+export async function getClientById(id: string): Promise<ClientProfile | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, avatar_url")
+    .eq("id", id)
+    .single(); // .single() zapewni, że dostaniemy jeden obiekt lub błąd
+
+  if (error) {
+    console.error("Błąd podczas pobierania profilu klienta:", error);
+    // Zwracamy null, aby na stronie można było obsłużyć brak użytkownika
+    return null;
+  }
+
+  return data;
+}

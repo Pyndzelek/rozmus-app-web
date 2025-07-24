@@ -1,0 +1,212 @@
+// src/lib/actions/plans.actions.ts
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { Database } from "@/types/supabase";
+import { revalidatePath } from "next/cache";
+import z from "zod";
+import { exerciseParamsSchema, workoutSchema } from "../validation";
+
+// Definiujemy typy dla naszego zagnieżdżonego zapytania
+export type WorkoutExerciseWithDefinition =
+  Database["public"]["Tables"]["workout_exercises"]["Row"] & {
+    exercise_definitions: Pick<
+      Database["public"]["Tables"]["exercise_definitions"]["Row"],
+      "name" | "category"
+    > | null;
+  };
+
+export type WorkoutWithExercises =
+  Database["public"]["Tables"]["workouts"]["Row"] & {
+    workout_exercises: WorkoutExerciseWithDefinition[];
+  };
+
+export type WorkoutPlanWithWorkouts =
+  Database["public"]["Tables"]["workout_plans"]["Row"] & {
+    workouts: WorkoutWithExercises[];
+  };
+
+export async function getWorkoutPlanByClientId(
+  clientId: string
+): Promise<WorkoutPlanWithWorkouts | null> {
+  const supabase = await createClient();
+
+  // To jest złożone zapytanie, które pobiera plan, jego treningi,
+  // a do każdego treningu dołącza jego ćwiczenia wraz z definicjami.
+  const { data, error } = await supabase
+    .from("workout_plans")
+    .select(
+      `
+      *,
+      workouts (
+        *,
+        workout_exercises (
+          *,
+          exercise_definitions (
+            name,
+            category
+          )
+        )
+      )
+    `
+    )
+    .eq("client_id", clientId)
+    .single(); // Zakładamy, że klient ma jeden plan
+
+  if (error && error.code !== "PGRST116") {
+    // Ignoruj błąd "brak wierszy"
+    console.error("Błąd podczas pobierania planu treningowego:", error);
+    throw new Error("Nie udało się pobrać planu treningowego.");
+  }
+
+  return data;
+}
+
+export async function createWorkoutPlan(clientId: string) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("workout_plans")
+    .insert({
+      client_id: clientId,
+      title: "Nowy Plan Treningowy",
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Błąd podczas tworzenia planu:", error);
+    throw new Error("Nie udało się utworzyć planu.");
+  }
+
+  revalidatePath(`/dashboard/clients/${clientId}`);
+  return data;
+}
+
+export async function createWorkout(values: z.infer<typeof workoutSchema>) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.from("workouts").insert({
+    workout_plan_id: values.planId,
+    name: values.name,
+  });
+
+  if (error) {
+    console.error("Błąd podczas tworzenia dnia treningowego:", error);
+    throw new Error("Nie udało się dodać dnia treningowego.");
+  }
+
+  revalidatePath(`/dashboard/clients/${values.clientId}`);
+}
+
+export async function addExercisesToWorkout(
+  workoutId: string,
+  exerciseIds: string[],
+  clientId: string
+) {
+  const supabase = await createClient();
+  const { data: definitions, error: definitionsError } = await supabase
+    .from("exercise_definitions")
+    .select("id, name")
+    .in("id", exerciseIds);
+
+  if (definitionsError) {
+    console.error(
+      "Błąd podczas pobierania definicji ćwiczeń:",
+      definitionsError
+    );
+    throw new Error("Nie udało się pobrać danych ćwiczeń.");
+  }
+
+  const { count } = await supabase
+    .from("workout_exercises")
+    .select("id", { count: "exact", head: true })
+    .eq("workout_id", workoutId);
+
+  const exercisesToAdd = definitions.map((def, index) => ({
+    workout_id: workoutId,
+    exercise_definition_id: def.id,
+    name: def.name,
+    order: (count ?? 0) + index + 1,
+  }));
+
+  const { error } = await supabase
+    .from("workout_exercises")
+    .insert(exercisesToAdd);
+
+  if (error) {
+    console.error("Błąd podczas dodawania ćwiczeń:", error);
+    throw new Error("Nie udało się dodać ćwiczeń.");
+  }
+
+  revalidatePath(`/dashboard/clients/${clientId}`);
+}
+
+export async function updateWorkoutExercise(
+  workoutExerciseId: string,
+  clientId: string,
+  values: z.infer<typeof exerciseParamsSchema>
+) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("workout_exercises")
+    .update({
+      sets: values.sets,
+      reps: values.reps,
+      tempo: values.tempo,
+      rest_period: values.rest_period,
+      notes: values.notes,
+    })
+    .eq("id", workoutExerciseId);
+
+  if (error) {
+    console.error("Błąd podczas aktualizacji ćwiczenia:", error);
+    throw new Error("Nie udało się zaktualizować ćwiczenia.");
+  }
+
+  revalidatePath(`/dashboard/clients/${clientId}`);
+}
+
+export async function deleteWorkoutExercise(
+  workoutExerciseId: string,
+  clientId: string
+) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("workout_exercises")
+    .delete()
+    .eq("id", workoutExerciseId);
+
+  if (error) {
+    console.error("Błąd podczas usuwania ćwiczenia:", error);
+    throw new Error("Nie udało się usunąć ćwiczenia.");
+  }
+
+  revalidatePath(`/dashboard/clients/${clientId}`);
+}
+
+export async function updateExercisesOrder(
+  items: { id: string; order: number }[],
+  clientId: string
+) {
+  const supabase = await createClient();
+
+  const updatePromises = items.map((item) =>
+    supabase
+      .from("workout_exercises")
+      .update({ order: item.order })
+      .eq("id", item.id)
+  );
+
+  const results = await Promise.all(updatePromises);
+
+  const a_Error = results.some((result) => result.error);
+  if (a_Error) {
+    console.error("Błąd podczas aktualizacji kolejności ćwiczeń", a_Error);
+    throw new Error("Nie udało się zaktualizować kolejności.");
+  }
+
+  revalidatePath(`/dashboard/clients/${clientId}`);
+}
