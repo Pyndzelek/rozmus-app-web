@@ -12,7 +12,7 @@ const navItems = [
   },
   {
     href: "/dashboard/clients",
-    label: "Podopieczni",
+    label: "Kreator Planów",
     icon: Users,
   },
   {
