@@ -227,3 +227,51 @@ export async function updateExercisesOrder(
 
   revalidatePath(`/dashboard/clients/${clientId}`);
 }
+
+export async function deleteWorkout(workoutId: string, clientId: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("workouts")
+    .delete()
+    .eq("id", workoutId);
+
+  if (error) {
+    console.error("Błąd podczas usuwania dnia treningowego:", error);
+    throw new Error("Nie udało się usunąć dnia treningowego.");
+  }
+
+  revalidatePath(`/dashboard/clients/${clientId}`);
+}
+
+export async function updateWorkout(
+  workoutId: string,
+  name: string,
+  clientId: string
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("workouts")
+    .update({ name })
+    .eq("id", workoutId);
+
+  if (error) {
+    console.error("Błąd podczas aktualizacji dnia treningowego:", error);
+    throw new Error("Nie udało się zaktualizować dnia treningowego.");
+  }
+
+  revalidatePath(`/dashboard/clients/${clientId}`);
+}
+
+export async function deleteWorkoutPlan(planId: string, clientId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("workout_plans")
+    .delete()
+    .eq("id", planId);
+  if (error) {
+    console.error("Błąd podczas usuwania planu:", error);
+    throw new Error("Nie udało się usunąć planu.");
+  }
+  revalidatePath(`/dashboard/clients/${clientId}`);
+}

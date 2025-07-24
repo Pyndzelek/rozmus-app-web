@@ -13,7 +13,6 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import { updateExercisesOrder } from "@/lib/actions/plans.actions";
 
 // Importy akcji i typów
 import {
@@ -22,8 +21,10 @@ import {
   createWorkoutPlan,
   createWorkout,
   addExercisesToWorkout,
+  updateExercisesOrder,
+  deleteWorkout,
+  updateWorkout,
 } from "@/lib/actions/plans.actions";
-
 import { workoutSchema } from "@/lib/validation";
 
 // Importy komponentów UI
@@ -37,7 +38,17 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { PlusCircle } from "lucide-react";
+import { Pencil, PlusCircle, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ExercisePickerModal } from "./exercise-picker-modal";
 import { WorkoutExerciseItem } from "./workout-exercise-item";
 
@@ -52,6 +63,9 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
     useState<WorkoutWithExercises | null>(null);
   const [isAddingWorkout, setIsAddingWorkout] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [workoutToDelete, setWorkoutToDelete] =
+    useState<WorkoutWithExercises | null>(null);
+  const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof workoutSchema>>({
     resolver: zodResolver(workoutSchema),
@@ -63,12 +77,10 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
       const updatedWorkout = plan.workouts.find(
         (w) => w.id === selectedWorkout.id
       );
-
       if (updatedWorkout) {
         const sortedExercises = [...updatedWorkout.workout_exercises].sort(
           (a, b) => a.order - b.order
         );
-
         setSelectedWorkout({
           ...updatedWorkout,
           workout_exercises: sortedExercises,
@@ -88,6 +100,16 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
     });
   };
 
+  const handleWorkoutNameUpdate = (workoutId: string, newName: string) => {
+    if (!newName.trim()) return;
+    startTransition(() => {
+      updateWorkout(workoutId, newName, clientId)
+        .then(() => toast.success("Nazwa dnia została zaktualizowana."))
+        .catch(() => toast.error("Błąd podczas aktualizacji nazwy."))
+        .finally(() => setEditingWorkoutId(null));
+    });
+  };
+
   const onWorkoutSubmit = (values: z.infer<typeof workoutSchema>) => {
     startTransition(async () => {
       try {
@@ -101,9 +123,24 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
     });
   };
 
+  const handleDeleteWorkout = () => {
+    if (!workoutToDelete) return;
+    startTransition(async () => {
+      try {
+        await deleteWorkout(workoutToDelete.id, clientId);
+        toast.success(`Dzień "${workoutToDelete.name}" został usunięty.`);
+        if (selectedWorkout?.id === workoutToDelete.id) {
+          setSelectedWorkout(null);
+        }
+        setWorkoutToDelete(null);
+      } catch (error) {
+        toast.error("Nie udało się usunąć dnia treningowego.");
+      }
+    });
+  };
+
   const handleAddExercises = (exerciseIds: string[]) => {
     if (!selectedWorkout) return;
-
     startTransition(async () => {
       try {
         await addExercisesToWorkout(selectedWorkout.id, exerciseIds, clientId);
@@ -117,12 +154,10 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-
     if (over && active.id !== over.id) {
       const exercises = selectedWorkout?.workout_exercises ?? [];
       const oldIndex = exercises.findIndex((e) => e.id === active.id);
       const newIndex = exercises.findIndex((e) => e.id === over.id);
-
       const reorderedExercises = arrayMove(exercises, oldIndex, newIndex);
 
       if (selectedWorkout) {
@@ -131,14 +166,12 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
           workout_exercises: reorderedExercises,
         });
       }
-
       const itemsToUpdate = reorderedExercises.map((item, index) => ({
         id: item.id,
         order: index + 1,
       }));
-
       startTransition(() => {
-        updateExercisesOrder(itemsToUpdate, clientId).catch((e) => {
+        updateExercisesOrder(itemsToUpdate, clientId).catch(() => {
           toast.error("Nie udało się zaktualizować kolejności.");
           if (selectedWorkout) {
             setSelectedWorkout({
@@ -164,6 +197,7 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
       </div>
     );
   }
+
   const existingExerciseIds =
     selectedWorkout?.workout_exercises.map((we) => we.exercise_definition_id) ??
     [];
@@ -177,8 +211,32 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
         existingExerciseIds={existingExerciseIds}
         isPending={isPending}
       />
+
+      <AlertDialog
+        open={!!workoutToDelete}
+        onOpenChange={(isOpen) => !isOpen && setWorkoutToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Czy na pewno chcesz usunąć?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Dzień treningowy <strong>{workoutToDelete?.name}</strong> oraz
+              wszystkie jego ćwiczenia zostaną trwale usunięte.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteWorkout}
+              disabled={isPending}
+            >
+              {isPending ? "Usuwanie..." : "Usuń"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Kolumna Lewa: Dni Treningowe */}
         <div className="md:col-span-1">
           <h3 className="text-lg font-semibold mb-4">
             Dni Treningowe ({plan.workouts.length})
@@ -187,21 +245,60 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
             {plan.workouts.map((workout) => (
               <Card
                 key={workout.id}
-                onClick={() => setSelectedWorkout(workout)}
                 className={cn(
-                  "cursor-pointer transition-all",
+                  "transition-all",
                   selectedWorkout?.id === workout.id
                     ? "border-primary shadow-md"
                     : "hover:border-gray-400 dark:hover:border-gray-600"
                 )}
               >
-                <CardContent className="p-3">
-                  <p className="font-medium">{workout.name}</p>
+                <CardContent className="p-3 flex items-center justify-between">
+                  <div
+                    className="flex-1 cursor-pointer"
+                    onClick={() => setSelectedWorkout(workout)}
+                  >
+                    {editingWorkoutId === workout.id ? (
+                      <Input
+                        defaultValue={workout.name}
+                        autoFocus
+                        onBlur={(e) =>
+                          handleWorkoutNameUpdate(workout.id, e.target.value)
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter")
+                            handleWorkoutNameUpdate(
+                              workout.id,
+                              e.currentTarget.value
+                            );
+                          if (e.key === "Escape") setEditingWorkoutId(null);
+                        }}
+                      />
+                    ) : (
+                      <p className="font-medium">{workout.name}</p>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setEditingWorkoutId(workout.id)}
+                  >
+                    <Pencil className="h-4 w-4 text-gray-500 hover:text-primary" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setWorkoutToDelete(workout);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-500" />
+                  </Button>
                 </CardContent>
               </Card>
             ))}
-
-            {/* Formularz dodawania nowego dnia */}
             {isAddingWorkout ? (
               <Card className="p-3">
                 <Form {...form}>
@@ -243,7 +340,6 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
           </div>
         </div>
 
-        {/* Kolumna Prawa: Szczegóły wybranego dnia */}
         <div className="md:col-span-2">
           {selectedWorkout ? (
             <Card>
