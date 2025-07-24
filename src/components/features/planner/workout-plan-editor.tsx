@@ -245,57 +245,62 @@ export function WorkoutPlanEditor({ plan, clientId }: WorkoutPlanEditorProps) {
             {plan.workouts.map((workout) => (
               <Card
                 key={workout.id}
+                onClick={() => setSelectedWorkout(workout)}
                 className={cn(
-                  "transition-all",
+                  "cursor-pointer transition-all",
                   selectedWorkout?.id === workout.id
                     ? "border-primary shadow-md"
                     : "hover:border-gray-400 dark:hover:border-gray-600"
                 )}
               >
-                <CardContent className="p-3 flex items-center justify-between">
-                  <div
-                    className="flex-1 cursor-pointer"
-                    onClick={() => setSelectedWorkout(workout)}
-                  >
-                    {editingWorkoutId === workout.id ? (
-                      <Input
-                        defaultValue={workout.name}
-                        autoFocus
-                        onBlur={(e) =>
-                          handleWorkoutNameUpdate(workout.id, e.target.value)
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter")
-                            handleWorkoutNameUpdate(
-                              workout.id,
-                              e.currentTarget.value
-                            );
-                          if (e.key === "Escape") setEditingWorkoutId(null);
-                        }}
-                      />
-                    ) : (
-                      <p className="font-medium">{workout.name}</p>
-                    )}
+                <CardContent className="p-3 flex items-center justify-between gap-2">
+                  {editingWorkoutId === workout.id ? (
+                    <Input
+                      defaultValue={workout.name}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()} // Zapobiegaj kliknięciu na kartę
+                      onBlur={(e) =>
+                        handleWorkoutNameUpdate(workout.id, e.target.value)
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter")
+                          handleWorkoutNameUpdate(
+                            workout.id,
+                            e.currentTarget.value
+                          );
+                        if (e.key === "Escape") setEditingWorkoutId(null);
+                      }}
+                    />
+                  ) : (
+                    <p className="font-medium flex-1 truncate">
+                      {workout.name}
+                    </p>
+                  )}
+
+                  <div className="flex items-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={(e) => {
+                        e.stopPropagation(); // Zapobiegaj kliknięciu na kartę
+                        setEditingWorkoutId(workout.id);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 text-gray-500 hover:text-primary" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={(e) => {
+                        e.stopPropagation(); // Zapobiegaj kliknięciu na kartę
+                        setWorkoutToDelete(workout);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-500" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => setEditingWorkoutId(workout.id)}
-                  >
-                    <Pencil className="h-4 w-4 text-gray-500 hover:text-primary" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setWorkoutToDelete(workout);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-500" />
-                  </Button>
                 </CardContent>
               </Card>
             ))}
