@@ -26,12 +26,23 @@ export default async function ClientPlanPage({ params }: ClientPlanPageProps) {
       getWorkoutPlanByClientId(params.clientId),
     ]);
 
+    // Sortowanie treningów według created_at (rosnąco)
+    const sortedWorkouts = plan?.workouts
+      ? [...plan.workouts].sort(
+          (a, b) =>
+            new Date(a.created_at!).getTime() -
+            new Date(b.created_at!).getTime()
+        )
+      : [];
+
     return (
       <div className="space-y-8">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">
-            Plan Treningowy{" "}
-            {client ? `dla ${client.full_name}` : "dla podopiecznego"}
+          <h1 className="text-2xl font-semibold">
+            Plan Treningowy dla{" "}
+            <span className="font-bold">
+              {client ? `${client.full_name}` : "podopiecznego"}
+            </span>
           </h1>
           <Button asChild variant="outline">
             <Link href="/dashboard">
@@ -52,9 +63,9 @@ export default async function ClientPlanPage({ params }: ClientPlanPageProps) {
               )}
             </CardHeader>
             <CardContent>
-              {plan.workouts.length > 0 ? (
+              {sortedWorkouts.length > 0 ? (
                 <Accordion type="multiple" className="w-full">
-                  {plan.workouts.map((workout) => (
+                  {sortedWorkouts.map((workout, index) => (
                     <AccordionItem key={workout.id} value={workout.id}>
                       <AccordionTrigger className="text-lg font-semibold">
                         {workout.name}
@@ -62,35 +73,38 @@ export default async function ClientPlanPage({ params }: ClientPlanPageProps) {
                       <AccordionContent>
                         {workout.workout_exercises.length > 0 ? (
                           <ul className="space-y-4">
-                            {workout.workout_exercises.map((exercise) => (
-                              <li
-                                key={exercise.id}
-                                className="flex flex-col space-y-1 border-b pb-2 last:border-b-0"
-                              >
-                                <span className="font-medium text-base">
-                                  {exercise.name}
-                                </span>
-                                <div className="text-sm text-muted-foreground">
-                                  <span>
-                                    Serie: {exercise.sets || "Brak"} |{" "}
+                            {[...workout.workout_exercises]
+                              .sort((a, b) => a.order - b.order)
+                              .map((exercise, exIndex) => (
+                                <li
+                                  key={exercise.id}
+                                  className="flex flex-col space-y-1 border-b pb-2 last:border-b-0"
+                                >
+                                  <span className="font-medium text-base">
+                                    {exIndex + 1}. {exercise.name}
                                   </span>
-                                  <span>
-                                    Powtórzenia: {exercise.reps || "Brak"} |{" "}
-                                  </span>
-                                  <span>
-                                    Tempo: {exercise.tempo || "Brak"} |{" "}
-                                  </span>
-                                  <span>
-                                    Odpoczynek: {exercise.rest_period || "Brak"}
-                                  </span>
-                                </div>
-                                {exercise.notes && (
-                                  <p className="text-sm text-muted-foreground italic">
-                                    Notatki: {exercise.notes}
-                                  </p>
-                                )}
-                              </li>
-                            ))}
+                                  <div className="text-sm text-muted-foreground">
+                                    <span>
+                                      Serie: {exercise.sets || "Brak"} |{" "}
+                                    </span>
+                                    <span>
+                                      Powtórzenia: {exercise.reps || "Brak"} |{" "}
+                                    </span>
+                                    <span>
+                                      Tempo: {exercise.tempo || "Brak"} |{" "}
+                                    </span>
+                                    <span>
+                                      Odpoczynek:{" "}
+                                      {exercise.rest_period || "Brak"}
+                                    </span>
+                                  </div>
+                                  {exercise.notes && (
+                                    <p className="text-sm text-muted-foreground italic">
+                                      Notatki: {exercise.notes}
+                                    </p>
+                                  )}
+                                </li>
+                              ))}
                           </ul>
                         ) : (
                           <p className="text-sm text-muted-foreground">
