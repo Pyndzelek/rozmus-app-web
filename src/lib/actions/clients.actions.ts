@@ -33,13 +33,35 @@ export async function getClientById(id: string): Promise<ClientProfile | null> {
     .from("profiles")
     .select("id, full_name, avatar_url")
     .eq("id", id)
-    .single(); // .single() zapewni, że dostaniemy jeden obiekt lub błąd
+    .single();
 
   if (error) {
     console.error("Błąd podczas pobierania profilu klienta:", error);
-    // Zwracamy null, aby na stronie można było obsłużyć brak użytkownika
     return null;
   }
 
   return data;
+}
+
+export async function getDashboardStats() {
+  const supabase = await createClient();
+
+  const { count: clientCount, error: clientError } = await supabase
+    .from("profiles")
+    .select("*", { count: "exact", head: true })
+    .eq("group", "USER");
+
+  const { count: exerciseCount, error: exerciseError } = await supabase
+    .from("exercise_definitions")
+    .select("*", { count: "exact", head: true });
+
+  if (clientError || exerciseError) {
+    console.error(
+      "Błąd podczas pobierania statystyk:",
+      clientError || exerciseError
+    );
+    return { clientCount: 0, exerciseCount: 0 };
+  }
+
+  return { clientCount, exerciseCount };
 }

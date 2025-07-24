@@ -1,9 +1,12 @@
 // src/app/dashboard/clients/page.tsx
 import { getClients } from "@/lib/actions/clients.actions";
 import { ClientList } from "@/components/features/clients/client-list";
+import { Metadata } from "next";
 
+export const metadata: Metadata = {
+  title: "Moi Podopieczni",
+};
 export default async function ClientsPage() {
-  // Ta strona powinna wywoływać TYLKO funkcję pobierającą listę wszystkich klientów.
   const clients = await getClients();
 
   return (
