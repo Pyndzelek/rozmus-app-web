@@ -187,7 +187,7 @@ export function ExerciseDataTable({ data }: ExerciseDataTableProps) {
       </AlertDialog>
 
       {/* Tabela */}
-      <div className="rounded-md border">
+      <div className="rounded-md border bg-white dark:bg-gray-900">
         <Table>
           <TableHeader>
             <TableRow>
