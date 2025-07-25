@@ -1,4 +1,3 @@
-// src/app/dashboard/clients/page.tsx
 import { getClients } from "@/lib/actions/clients.actions";
 import { ClientList } from "@/components/features/clients/client-list";
 import { Metadata } from "next";

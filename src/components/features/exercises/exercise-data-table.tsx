@@ -12,7 +12,6 @@ import {
 import { MoreHorizontal, Trash2, Pencil } from "lucide-react";
 import { exerciseSchema } from "@/lib/validation";
 
-// Importy komponentów UI
 import {
   Table,
   TableBody,
@@ -24,7 +23,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -153,7 +151,7 @@ export function ExerciseDataTable({ data }: ExerciseDataTableProps) {
         open={isEditModalOpen}
         onOpenChange={(isOpen) => {
           setIsEditModalOpen(isOpen);
-          if (!isOpen) setSelectedExercise(null); // Resetuj po zamknięciu
+          if (!isOpen) setSelectedExercise(null);
         }}
       >
         <DialogContent>
@@ -163,7 +161,7 @@ export function ExerciseDataTable({ data }: ExerciseDataTableProps) {
           <ExerciseForm
             onSubmit={onSubmit}
             isPending={isPending}
-            initialData={selectedExercise} // Przekazujemy dane do formularza
+            initialData={selectedExercise}
           />
         </DialogContent>
       </Dialog>

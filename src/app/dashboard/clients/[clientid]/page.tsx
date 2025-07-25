@@ -4,15 +4,12 @@ import { notFound } from "next/navigation";
 import { WorkoutPlanEditor } from "@/components/features/planner/workout-plan-editor";
 import { DeletePlanButton } from "@/components/features/planner/delete-plan-button";
 
-interface ClientPageProps {
-  params: {
-    clientId: string;
-  };
-}
-
-export default async function ClientPage(props: ClientPageProps) {
-  const params = await props.params;
-  const clientId = params.clientId;
+export default async function ClientPage({
+  params,
+}: {
+  params: Promise<{ clientId: string }>;
+}) {
+  const { clientId } = await params;
 
   const [client, plan] = await Promise.all([
     getClientById(clientId),
@@ -30,7 +27,6 @@ export default async function ClientPage(props: ClientPageProps) {
           <h2 className="text-xl font-semibold">
             {client.full_name} - Plan treningowy
           </h2>
-          {/* Przycisk usuwania pojawi się tylko, gdy plan istnieje */}
           {plan && <DeletePlanButton planId={plan.id} clientId={client.id} />}
         </div>
         <WorkoutPlanEditor initialPlan={plan} clientId={client.id} />

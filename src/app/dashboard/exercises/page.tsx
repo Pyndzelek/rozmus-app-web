@@ -1,4 +1,3 @@
-// src/app/dashboard/exercises/page.tsx
 import { getExerciseDefinitions } from "@/lib/actions/exercises.actions";
 import { ExerciseDataTable } from "@/components/features/exercises/exercise-data-table";
 import { Metadata } from "next";

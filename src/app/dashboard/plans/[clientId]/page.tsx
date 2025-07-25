@@ -12,18 +12,20 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 interface ClientPlanPageProps {
-  params: { clientId: string };
+  params: Promise<{ clientId: string }>;
 }
 
 export default async function ClientPlanPage({ params }: ClientPlanPageProps) {
   try {
-    if (!params.clientId || params.clientId === "undefined") {
+    const { clientId } = await params;
+
+    if (!clientId || clientId === "undefined") {
       throw new Error("Nieprawidłowy identyfikator podopiecznego w URL.");
     }
 
     const [client, plan] = await Promise.all([
-      getClientById(params.clientId),
-      getWorkoutPlanByClientId(params.clientId),
+      getClientById(clientId),
+      getWorkoutPlanByClientId(clientId),
     ]);
 
     // Sortowanie treningów według created_at (rosnąco)

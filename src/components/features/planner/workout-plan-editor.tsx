@@ -449,7 +449,7 @@ export function WorkoutPlanEditor({
                 ) : (
                   <div className="text-center py-12 border-2 border-dashed rounded-lg">
                     <p className="text-gray-500">
-                      Kliknij "Dodaj ćwiczenie", aby rozpocząć.
+                      Kliknij &quot;Dodaj ćwiczenie&quot;, aby rozpocząć.
                     </p>
                   </div>
                 )}

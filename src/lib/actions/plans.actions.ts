@@ -1,4 +1,3 @@
-// src/lib/actions/plans.actions.ts
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
@@ -49,7 +48,7 @@ export async function getWorkoutPlanByClientId(
     `
     )
     .eq("client_id", clientId)
-    .single(); // Zakładamy, że klient ma jeden plan
+    .single();
 
   if (error && error.code !== "PGRST116") {
     // Ignoruj błąd "brak wierszy"
@@ -87,7 +86,7 @@ export async function createWorkout(values: z.infer<typeof workoutSchema>) {
   }
   const supabase = await createClient();
 
-  const { data, error } = await supabase.from("workouts").insert({
+  const { error } = await supabase.from("workouts").insert({
     workout_plan_id: values.planId,
     name: values.name,
   });
@@ -219,7 +218,7 @@ export async function updateExercisesOrder(
     WHERE id IN (${idsToUpdate})
   `;
 
-  const { error } = await (supabase as any).rpc("execute_sql", { sql: query });
+  const { error } = await supabase.rpc("execute_sql", { sql: query });
 
   if (error) {
     console.error("Błąd podczas aktualizacji kolejności (raw SQL):", error);
